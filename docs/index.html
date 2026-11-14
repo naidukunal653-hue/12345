@@ -1,1 +1,603 @@
+// ============================================================
+// LYMPHIX DASHBOARD
+// Dynamic simulated sensor data + real-time graphs
+// 60 second / 1 Hz rolling window
+// ============================================================
 
+const MAX_POINTS = 60;
+
+
+// ------------------------------------------------------------
+// Current sensor values
+// ------------------------------------------------------------
+
+let sensorData = {
+    load: 499.84,
+    pressure: 35.07,
+    movement: 0.99
+};
+
+
+// ------------------------------------------------------------
+// History arrays
+// ------------------------------------------------------------
+
+let loadHistory = [];
+let pressureHistory = [];
+let movementHistory = [];
+let warningHistory = [];
+
+
+// ------------------------------------------------------------
+// Utility
+// ------------------------------------------------------------
+
+function clamp(value, min, max) {
+    return Math.max(min, Math.min(max, value));
+}
+
+
+// ------------------------------------------------------------
+// Generate simulated sensor readings
+// ------------------------------------------------------------
+
+function generateSensorData() {
+
+    sensorData.load +=
+        (Math.random() - 0.5) * 4;
+
+    sensorData.load = clamp(
+        sensorData.load,
+        490,
+        510
+    );
+
+
+    sensorData.pressure +=
+        (Math.random() - 0.5) * 0.5;
+
+    sensorData.pressure = clamp(
+        sensorData.pressure,
+        33,
+        37
+    );
+
+
+    sensorData.movement +=
+        (Math.random() - 0.5) * 0.20;
+
+    sensorData.movement = clamp(
+        sensorData.movement,
+        0.70,
+        1.30
+    );
+}
+
+
+// ------------------------------------------------------------
+// Calculate sensor fusion
+// ------------------------------------------------------------
+
+function calculateFusion() {
+
+    const loadDeviation =
+        Math.abs(sensorData.load - 500) / 10;
+
+    const pressureDeviation =
+        Math.abs(sensorData.pressure - 35) / 2;
+
+    const movementDeviation =
+        Math.abs(sensorData.movement - 1) / 0.30;
+
+
+    return clamp(
+        (
+            loadDeviation +
+            pressureDeviation +
+            movementDeviation
+        ) / 3,
+        0,
+        1
+    );
+}
+
+
+// ------------------------------------------------------------
+// Warning score
+// ------------------------------------------------------------
+
+function calculateWarning(fusion) {
+
+    return clamp(
+        fusion * 25,
+        0,
+        100
+    );
+}
+
+
+// ------------------------------------------------------------
+// Add value to rolling history
+// ------------------------------------------------------------
+
+function addToHistory(array, value) {
+
+    array.push(value);
+
+    if (array.length > MAX_POINTS) {
+        array.shift();
+    }
+}
+
+
+// ------------------------------------------------------------
+// Update dashboard values
+// ------------------------------------------------------------
+
+function updateValues(fusion, warning) {
+
+    document.getElementById(
+        "loadValue"
+    ).textContent =
+        sensorData.load.toFixed(2);
+
+
+    document.getElementById(
+        "pressureValue"
+    ).textContent =
+        sensorData.pressure.toFixed(2);
+
+
+    document.getElementById(
+        "movementValue"
+    ).textContent =
+        sensorData.movement.toFixed(2);
+
+
+    document.getElementById(
+        "fusionScore"
+    ).textContent =
+        fusion.toFixed(2);
+
+
+    document.getElementById(
+        "warningScore"
+    ).textContent =
+        warning.toFixed(2);
+}
+
+
+// ------------------------------------------------------------
+// Update status
+// ------------------------------------------------------------
+
+function updateStatus(warning) {
+
+    const status =
+        document.getElementById("finalStatus");
+
+    const message =
+        document.getElementById("statusMessage");
+
+
+    if (warning >= 40) {
+
+        status.textContent =
+            "EARLY WARNING";
+
+        message.textContent =
+            "Significant change detected";
+
+
+    } else if (warning >= 20) {
+
+        status.textContent =
+            "MONITOR";
+
+        message.textContent =
+            "Changes detected - monitoring";
+
+
+    } else {
+
+        status.textContent =
+            "NORMAL";
+
+        message.textContent =
+            "No significant change detected";
+    }
+}
+
+
+// ------------------------------------------------------------
+// Update timestamp
+// ------------------------------------------------------------
+
+function updateTime() {
+
+    const element =
+        document.getElementById("lastUpdate");
+
+
+    const now =
+        new Date();
+
+
+    element.innerHTML =
+        "Last update: <strong>" +
+        now.toLocaleTimeString() +
+        "</strong>";
+}
+
+
+// ============================================================
+// GRAPH FUNCTIONS
+// ============================================================
+
+
+// ------------------------------------------------------------
+// Draw one line graph
+// ------------------------------------------------------------
+
+function drawChart(
+    canvasId,
+    data,
+    color,
+    minValue,
+    maxValue
+) {
+
+    const canvas =
+        document.getElementById(canvasId);
+
+
+    if (!canvas) {
+        return;
+    }
+
+
+    const rect =
+        canvas.getBoundingClientRect();
+
+
+    const dpr =
+        window.devicePixelRatio || 1;
+
+
+    canvas.width =
+        rect.width * dpr;
+
+    canvas.height =
+        rect.height * dpr;
+
+
+    const ctx =
+        canvas.getContext("2d");
+
+
+    ctx.scale(dpr, dpr);
+
+
+    const width =
+        rect.width;
+
+    const height =
+        rect.height;
+
+
+    // Background
+    ctx.fillStyle =
+        "#091727";
+
+    ctx.fillRect(
+        0,
+        0,
+        width,
+        height
+    );
+
+
+    // Grid
+    ctx.strokeStyle =
+        "#183047";
+
+    ctx.lineWidth = 1;
+
+
+    for (
+        let i = 0;
+        i <= 4;
+        i++
+    ) {
+
+        const y =
+            (height / 4) * i;
+
+
+        ctx.beginPath();
+
+        ctx.moveTo(
+            0,
+            y
+        );
+
+        ctx.lineTo(
+            width,
+            y
+        );
+
+        ctx.stroke();
+    }
+
+
+    // Need at least two points
+    if (data.length < 2) {
+        return;
+    }
+
+
+    // Line
+    ctx.beginPath();
+
+    data.forEach(
+        (value, index) => {
+
+            const x =
+                (index /
+                    (MAX_POINTS - 1)) *
+                width;
+
+
+            const normalized =
+                (value - minValue) /
+                (maxValue - minValue);
+
+
+            const y =
+                height -
+                (normalized * height);
+
+
+            if (index === 0) {
+
+                ctx.moveTo(
+                    x,
+                    y
+                );
+
+            } else {
+
+                ctx.lineTo(
+                    x,
+                    y
+                );
+            }
+        }
+    );
+
+
+    ctx.strokeStyle =
+        color;
+
+    ctx.lineWidth = 2;
+
+    ctx.stroke();
+
+
+    // Current value dot
+    const last =
+        data[data.length - 1];
+
+
+    const lastX =
+        ((data.length - 1) /
+            (MAX_POINTS - 1)) *
+        width;
+
+
+    const lastNormalized =
+        (last - minValue) /
+        (maxValue - minValue);
+
+
+    const lastY =
+        height -
+        (lastNormalized * height);
+
+
+    ctx.beginPath();
+
+    ctx.arc(
+        lastX,
+        lastY,
+        3,
+        0,
+        Math.PI * 2
+    );
+
+
+    ctx.fillStyle =
+        color;
+
+    ctx.fill();
+}
+
+
+// ------------------------------------------------------------
+// Draw all graphs
+// ------------------------------------------------------------
+
+function drawAllCharts() {
+
+    drawChart(
+        "loadChart",
+        loadHistory,
+        "#42e8b4",
+        490,
+        510
+    );
+
+
+    drawChart(
+        "pressureChart",
+        pressureHistory,
+        "#4fa9ff",
+        33,
+        37
+    );
+
+
+    drawChart(
+        "movementChart",
+        movementHistory,
+        "#ffb454",
+        0.70,
+        1.30
+    );
+
+
+    drawChart(
+        "warningChart",
+        warningHistory,
+        "#ff6b6b",
+        0,
+        100
+    );
+}
+
+
+// ============================================================
+// MAIN UPDATE
+// ============================================================
+
+function updateDashboard() {
+
+    // Generate new simulated readings
+    generateSensorData();
+
+
+    // Calculate analysis
+    const fusion =
+        calculateFusion();
+
+
+    const warning =
+        calculateWarning(fusion);
+
+
+    // Update history
+    addToHistory(
+        loadHistory,
+        sensorData.load
+    );
+
+
+    addToHistory(
+        pressureHistory,
+        sensorData.pressure
+    );
+
+
+    addToHistory(
+        movementHistory,
+        sensorData.movement
+    );
+
+
+    addToHistory(
+        warningHistory,
+        warning
+    );
+
+
+    // Update numbers
+    updateValues(
+        fusion,
+        warning
+    );
+
+
+    // Update status
+    updateStatus(
+        warning
+    );
+
+
+    // Update clock
+    updateTime();
+
+
+    // Draw graphs
+    drawAllCharts();
+}
+
+
+// ============================================================
+// START
+// ============================================================
+
+window.addEventListener(
+    "load",
+    function () {
+
+        // Create initial history
+        for (
+            let i = 0;
+            i < 20;
+            i++
+        ) {
+
+            generateSensorData();
+
+
+            const fusion =
+                calculateFusion();
+
+
+            const warning =
+                calculateWarning(fusion);
+
+
+            addToHistory(
+                loadHistory,
+                sensorData.load
+            );
+
+
+            addToHistory(
+                pressureHistory,
+                sensorData.pressure
+            );
+
+
+            addToHistory(
+                movementHistory,
+                sensorData.movement
+            );
+
+
+            addToHistory(
+                warningHistory,
+                warning
+            );
+        }
+
+
+        // First display
+        updateDashboard();
+
+
+        // Update once per second
+        setInterval(
+            updateDashboard,
+            1000
+        );
+    }
+);
+
+
+// Redraw graphs when browser is resized
+window.addEventListener(
+    "resize",
+    drawAllCharts
+);
